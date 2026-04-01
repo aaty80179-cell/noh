@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BrainMap OS – Sovereign Medical Engine V14</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+  <!-- PDF.js for PDF reading -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Mammoth.js for DOCX reading -->
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap');
+    * { box-sizing: border-box; }
+    body { font-family: 'Tajawal', sans-serif; -webkit-tap-highlight-color: transparent; overflow: hidden; margin: 0; padding: 0; background: #020617; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(100,100,100,0.3); border-radius: 10px; }
+
+    @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pulseRing { 0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.8); } 70% { box-shadow: 0 0 0 24px rgba(37,99,235,0); } 100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); } }
+    @keyframes audioWave { 0%, 100% { height: 8px; } 50% { height: 32px; } }
+    @keyframes typingDot { 0%, 100% { transform: translateY(0); opacity: 0.4; } 50% { transform: translateY(-4px); opacity: 1; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+
+    .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
+    .voice-pulse { animation: pulseRing 1.5s infinite; }
+    .wave-bar { animation: audioWave 1s ease-in-out infinite; }
+    .typing-dot { animation: typingDot 1s infinite; }
+    .spin { animation: spin 1s linear infinite; }
+
+    .glass { background: rgba(255,255,255,0.04); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
+
+    .prose table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.78rem; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    .prose th { background: rgba(59,130,246,0.25); padding: 10px 12px; border: 1px solid rgba(255,255,255,0.1); font-weight: 900; text-align: right; }
+    .prose td { padding: 9px 12px; border: 1px solid rgba(255,255,255,0.06); text-align: right; }
+    .prose tr:nth-child(even) { background: rgba(0,0,0,0.15); }
+    .prose img { border-radius: 12px; max-width: 100%; margin: 10px 0; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+    .prose strong { color: #60a5fa; }
+    .prose em { color: #94a3b8; }
+    .prose pre { background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 0.75rem; font-family: 'Courier New', monospace; }
+    .prose code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+    .prose blockquote { border-right: 3px solid #3b82f6; padding-right: 12px; margin: 8px 0; color: #94a3b8; }
+    .prose h1, .prose h2, .prose h3 { font-weight: 900; margin: 12px 0 6px; }
+    .prose ul, .prose ol { padding-right: 18px; }
+    .prose li { margin: 3px 0; line-height: 1.7; }
+    .prose a { color: #60a5fa; text-decoration: underline; }
+
+    input[type="file"] { display: none; }
+
+    .nb-card { transition: all 0.2s; }
+    .nb-card:hover { transform: translateY(-2px); }
+
+    .voice-selector option { background: #0f172a; color: #f1f5f9; }
+
+    .search-result { border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .search-result:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const DEV_CODE = "AaAa@3652";
+    const EDU_DOMAIN = ".m-mail.edu.eg";
+
+    const GROQ_KEYS = [
+      "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",
+      "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",
+      "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",
+      "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"
+    ];
+
+    const GROQ_MODELS = [
+      "llama-3.3-70b-versatile",
+      "llama3-70b-8192",
+      "mixtral-8x7b-32768",
+      "gemma2-9b-it"
+    ];
+
+    const VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+    const WHISPER_MODEL = "whisper-large-v3";
+
+    const THEMES = [
+      { id: 't1',  name: 'Dark Mode',        bg: '#020617', text: '#f8fafc', card: '#0f172a', border: '#1e293b', primary: '#3b82f6' },
+      { id: 't2',  name: 'Medical White',     bg: '#f8fafc', text: '#0f172a', card: '#ffffff', border: '#e2e8f0', primary: '#2563eb' },
+      { id: 't3',  name: 'Surgical Green',    bg: '#ecfdf5', text: '#064e3b', card: '#ffffff', border: '#d1fae5', primary: '#059669' },
+      { id: 't4',  name: 'Neural Violet',     bg: '#2e1065', text: '#f5f3ff', card: '#4c1d95', border: '#5b21b6', primary: '#a855f7' },
+      { id: 't5',  name: 'Clinical Blue',     bg: '#eff6ff', text: '#1e3a8a', card: '#dbeafe', border: '#bfdbfe', primary: '#2563eb' },
+      { id: 't6',  name: 'Radiology Gray',    bg: '#111827', text: '#f3f4f6', card: '#1f2937', border: '#374151', primary: '#9ca3af' },
+      { id: 't7',  name: 'Emergency Red',     bg: '#450a0a', text: '#fef2f2', card: '#7f1d1d', border: '#991b1b', primary: '#ef4444' },
+      { id: 't8',  name: 'Pediatric Yellow',  bg: '#fffbeb', text: '#78350f', card: '#fef3c7', border: '#fde68a', primary: '#d97706' },
+      { id: 't9',  name: 'Oncology Black',    bg: '#000000', text: '#e5e7eb', card: '#111827', border: '#374151', primary: '#10b981' },
+      { id: 't10', name: 'Pharmacy Teal',     bg: '#f0fdfa', text: '#134e4a', card: '#ccfbf1', border: '#99f6e4', primary: '#0d9488' },
+      { id: 't11', name: 'Genetics Rose',     bg: '#fff1f2', text: '#881337', card: '#ffe4e6', border: '#fecdd3', primary: '#e11d48' },
+      { id: 't12', name: 'Immunology Cyan',   bg: '#ecfeff', text: '#164e63', card: '#cffafe', border: '#a5f3fc', primary: '#0891b2' },
+      { id: 't13', name: 'Psychiatry Indigo', bg: '#eef2ff', text: '#312e81', card: '#e0e7ff', border: '#c7d2fe', primary: '#4f46e5' },
+      { id: 't14', name: 'BioMistral Neo',    bg: '#0a0a0a', text: '#facc15', card: '#171717', border: '#292524', primary: '#eab308' },
+      { id: 't15', name: 'Surgery Purple',    bg: '#1e0040', text: '#e9d5ff', card: '#2d0060', border: '#4c1d95', primary: '#c084fc' }
+    ];
+
+    const db = new Dexie("BrainMapOS_V14");
+    db.version(2).stores({
+      users:         '++id, name, email, type',
+      sessions:      '++id, userId, title, timestamp',
+      messages:      '++id, sessionId, role, text, timestamp, mediaType',
+      files:         '++id, userId, sessionId, name, fileType, content, base64, timestamp',
+      injected_html: '++id, code, timestamp',
+      settings:      '++id, userId, themeId, voiceName, voiceRate, voicePitch'
+    });
+
+    const allocateArchive = () => {
+      try {
+        const req = indexedDB.open("BrainMap_Archive_V2", 1);
+        req.onupgradeneeded = e => {
+          const idb = e.target.result;
+          if (!idb.objectStoreNames.contains("archive")) idb.createObjectStore("archive", { keyPath: "fid" });
+        };
+        req.onsuccess = e => {
+          const idb = e.target.result;
+          const tx = idb.transaction("archive", "readwrite");
+          const store = tx.objectStore("archive");
+          store.count().onsuccess = ce => {
+            if (ce.target.result < 1000) {
+              const block = "MED_BLOCK_".repeat(60);
+              for (let i = 1; i <= 1000; i++) store.put({ fid: i, n: `Vol_${i}`, d: block, ts: Date.now() });
+            }
+          };
+        };
+      } catch(e) {}
+    };
+
+    // ─────────────────────────────────────────────
+    // FILE PARSERS
+    // ─────────────────────────────────────────────
+    const parsePDF = async (file) => {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let text = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(s => s.str).join(' ') + '\n';
+      }
+      return text.trim();
+    };
+
+    const parseDOCX = async (file) => {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value.trim();
+    };
+
+    const fileToBase64 = (file) => new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = e => res(e.target.result);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+
+    const fileToText = (file) => new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = e => res(e.target.result);
+      reader.onerror = rej;
+      reader.readAsText(file);
+    });
+
+    const isImage = (f) => f.type.startsWith('image/');
+    const isAudio = (f) => f.type.startsWith('audio/');
+    const isVideo = (f) => f.type.startsWith('video/');
+    const isPDF  = (f) => f.type === 'application/pdf';
+    const isDOCX = (f) => f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.name.endsWith('.docx');
+    const isText = (f) => f.type.startsWith('text/') || ['.txt','.md','.csv','.json','.xml','.html','.htm'].some(e => f.name.toLowerCase().endsWith(e));
+
+    // ─────────────────────────────────────────────
+    // GROQ API ENGINE
+    // ─────────────────────────────────────────────
+    const callGroqText = async (messages, globalContext, fileContext) => {
+      const systemPrompt = [
+        "أنت مساعد طبي استنتاجي متقدم (BrainMap OS V14). قواعد ثابتة:",
+        "- إجاباتك دقيقة مبنية على الطب القائم على الأدلة (Evidence-Based Medicine).",
+        "- استخدم Markdown الغني: جداول منظمة، عناوين، قوائم، كود طبي عند الحاجة.",
+        "- 90% طبي وعلمي عالي الجودة، 10% تفاعل عام.",
+        "- اربط السياق بالمحادثات السابقة (30 رسالة).",
+        "- عند وجود جداول استخدم الأنواع المناسبة: تفاضلي، دوائي، مخبري، علامات حيوية، خلوي، مقارنة، خطة علاج، أعراض، تداخلات دوائية، نظام غذائي.",
+        globalContext ? `\n═══ سياق من الملفات المرفوعة ═══\n${globalContext.substring(0, 8000)}\n═══` : '',
+        fileContext ? `\n═══ محتوى الملف الحالي: [${fileContext.name}] ═══\n${fileContext.content ? fileContext.content.substring(0, 6000) : ''}\n═══` : ''
+      ].filter(Boolean).join('\n');
+
+      const apiMsgs = [
+        { role: "system", content: systemPrompt },
+        ...messages.slice(-30).map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }))
+      ];
+
+      for (let mi = 0; mi < GROQ_MODELS.length; mi++) {
+        for (let ki = 0; ki < GROQ_KEYS.length; ki++) {
+          const key = GROQ_KEYS[(mi + ki) % GROQ_KEYS.length];
+          try {
+            const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ model: GROQ_MODELS[mi], messages: apiMsgs, temperature: 0.35, max_tokens: 4096 })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              return { text: data.choices[0].message.content, model: GROQ_MODELS[mi] };
+            }
+            if (res.status === 429 || res.status === 503) continue;
+            const err = await res.json().catch(() => ({}));
+            if (err?.error?.code === "model_not_active") break;
+          } catch(_) { continue; }
+        }
+      }
+      return { text: "⚠️ تعذّر الاتصال. تحقق من الإنترنت أو حاول لاحقاً.", model: null };
+    };
+
+    const callGroqVision = async (base64DataUrl, userPrompt, groqKey) => {
+      const key = groqKey || GROQ_KEYS[0];
+      const mimeMatch = base64DataUrl.match(/^data:([^;]+);base64,/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+      const base64Data = base64DataUrl.split(',')[1];
+
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: VISION_MODEL,
+            messages: [{
+              role: "user",
+              content: [
+                { type: "text", text: userPrompt || "حلّل هذه الصورة الطبية بالتفصيل وقدّم تحليلاً سريرياً وعلمياً شاملاً." },
+                { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } }
+              ]
+            }],
+            max_tokens: 2048
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.choices[0].message.content;
+        }
+      } catch(_) {}
+      return null;
+    };
+
+    const callGroqWhisper = async (audioBlob, key) => {
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'audio.webm');
+      formData.append('model', WHISPER_MODEL);
+      formData.append('language', 'ar');
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${key || GROQ_KEYS[0]}` },
+          body: formData
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.text;
+        }
+      } catch(_) {}
+      return null;
+    };
+
+    // ─────────────────────────────────────────────
+    // WEB SEARCH (DuckDuckGo)
+    // ─────────────────────────────────────────────
+    const searchWeb = async (query) => {
+      try {
+        const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
+        const data = await res.json();
+        const results = [];
+        if (data.Abstract) results.push({ title: data.Heading, snippet: data.Abstract, url: data.AbstractURL });
+        if (data.RelatedTopics) {
+          data.RelatedTopics.slice(0, 5).forEach(t => {
+            if (t.Text) results.push({ title: t.Text.substring(0, 60), snippet: t.Text, url: t.FirstURL });
+          });
+        }
+        return results;
+      } catch(_) { return []; }
+    };
+
+    // ─────────────────────────────────────────────
+    // TTS ENGINE — uses all available system voices
+    // ─────────────────────────────────────────────
+    let availableVoices = [];
+    const loadVoices = () => {
+      availableVoices = window.speechSynthesis.getVoices();
+    };
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+      loadVoices();
+    }
+
+    const speakText = (text, voiceName, rate = 1, pitch = 1) => {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const clean = text.replace(/[#*`_\[\]>|~]/g, '').replace(/\n+/g, ' ').substring(0, 500);
+      const utt = new SpeechSynthesisUtterance(clean);
+      const voices = window.speechSynthesis.getVoices();
+      const chosen = voices.find(v => v.name === voiceName) || voices.find(v => v.lang.startsWith('ar')) || voices[0];
+      if (chosen) utt.voice = chosen;
+      utt.lang = chosen?.lang || 'ar-SA';
+      utt.rate = rate;
+      utt.pitch = pitch;
+      window.speechSynthesis.speak(utt);
+    };
+
+    // ─────────────────────────────────────────────
+    // MAIN APP
+    // ─────────────────────────────────────────────
+    const App = () => {
+      const [view, setView] = useState('login');
+      const [accounts, setAccounts] = useState([]);
+      const [currentUser, setCurrentUser] = useState(null);
+      const [regForm, setRegForm] = useState({ name: '', email: '', password: '' });
+
+      const [sessions, setSessions] = useState([]);
+      const [currentSessionId, setCurrentSessionId] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState('');
+
+      const [pendingFile, setPendingFile] = useState(null);
+      const [globalContext, setGlobalContext] = useState('');
+      const [uploadedFiles, setUploadedFiles] = useState([]);
+
+      const [panels, setPanels] = useState({ plusMenu: false, settings: false, sidebar: false, accounts: false, notebooklm: false, search: false });
+      const [voiceMode, setVoiceMode] = useState(false);
+      const [isTyping, setIsTyping] = useState(false);
+      const [activeModel, setActiveModel] = useState(GROQ_MODELS[0]);
+
+      const [systemVoices, setSystemVoices] = useState([]);
+      const [selectedVoiceName, setSelectedVoiceName] = useState('');
+      const [voiceRate, setVoiceRate] = useState(1);
+      const [voicePitch, setVoicePitch] = useState(1);
+      const [ttsEnabled, setTtsEnabled] = useState(true);
+
+      const [theme, setTheme] = useState(THEMES[0]);
+
+      const [devData, setDevData] = useState({ htmlModules: [], socialLinks: [] });
+      const [devInput, setDevInput] = useState({ html: '', link: '' });
+
+      const [searchQuery, setSearchQuery] = useState('');
+      const [searchResults, setSearchResults] = useState([]);
+      const [isSearching, setIsSearching] = useState(false);
+
+      const [nbMode, setNbMode] = useState('');
+      const [nbResult, setNbResult] = useState('');
+      const [isNbProcessing, setIsNbProcessing] = useState(false);
+
+      const [isRecording, setIsRecording] = useState(false);
+      const mediaRecorderRef = useRef(null);
+      const audioChunksRef = useRef([]);
+      const scrollRef = useRef(null);
+      const recognitionRef = useRef(null);
+      const fileInputRef = useRef(null);
+
+      const T = theme;
+
+      useEffect(() => {
+        allocateArchive();
+        loadAccounts();
+        loadInjectedHTML();
+        const loadVoicesInterval = setInterval(() => {
+          const v = window.speechSynthesis?.getVoices() || [];
+          if (v.length > 0) {
+            setSystemVoices(v);
+            if (!selectedVoiceName) {
+              const arabic = v.find(x => x.lang.startsWith('ar'));
+              setSelectedVoiceName(arabic?.name || v[0]?.name || '');
+            }
+            clearInterval(loadVoicesInterval);
+          }
+        }, 200);
+        return () => clearInterval(loadVoicesInterval);
+      }, []);
+
+      useEffect(() => {
+        if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+      }, [messages, isTyping]);
+
+      useEffect(() => {
+        if (currentUser) { loadSessions(currentUser.id); loadGlobalContext(currentUser.id); }
+      }, [currentUser]);
+
+      useEffect(() => {
+        if (currentSessionId !== null) loadMessages(currentSessionId);
+      }, [currentSessionId]);
+
+      const loadAccounts = async () => setAccounts(await db.users.toArray());
+
+      const loadSessions = async (uid) => {
+        const list = await db.sessions.where({ userId: String(uid) }).reverse().sortBy('timestamp');
+        setSessions(list);
+        if (list.length > 0) setCurrentSessionId(list[0].id);
+        else await createNewSession(uid);
+      };
+
+      const loadMessages = async (sid) => {
+        const msgs = await db.messages.where({ sessionId: sid }).sortBy('timestamp');
+        setMessages(msgs);
+      };
+
+      const loadGlobalContext = async (uid) => {
+        const files = await db.files.where({ userId: String(uid) }).toArray();
+        setUploadedFiles(files);
+        const ctx = files.filter(f => f.content).map(f => `[ملف: ${f.name}]\n${f.content}`).join('\n\n---\n\n');
+        setGlobalContext(ctx);
+      };
+
+      const loadInjectedHTML = async () => {
+        const modules = await db.injected_html.toArray();
+        setDevData(p => ({ ...p, htmlModules: modules }));
+      };
+
+      // AUTH
+      const handleRegister = async () => {
+        if (!regForm.name.trim()) return alert("الاسم مطلوب");
+        if (!regForm.email.endsWith(EDU_DOMAIN)) return alert(`البريد يجب أن ينتهي بـ ${EDU_DOMAIN}`);
+        if (regForm.password.length !== 9) return alert("كلمة المرور 9 رموز بالضبط");
+        if (await db.users.count() >= 3) return alert("الحد الأقصى 3 حسابات");
+        const u = { name: regForm.name, email: regForm.email, password: regForm.password, type: 'user' };
+        u.id = await db.users.add(u);
+        setAccounts(p => [...p, u]);
+        loginUser(u);
+      };
+
+      const loginUser = (u) => {
+        setCurrentUser(u);
+        setPanels(p => ({ ...p, accounts: false }));
+        setView('app');
+      };
+
+      const handleDevLogin = () => {
+        if (regForm.password === DEV_CODE) {
+          loginUser({ id: 'dev', name: 'Dr: Ibrahim Taha', email: 'root@brainmap.sys', type: 'dev' });
+        } else alert("رمز المطور غير صحيح");
+      };
+
+      const handleLogout = () => {
+        window.speechSynthesis?.cancel();
+        setCurrentUser(null); setCurrentSessionId(null); setMessages([]);
+        setPendingFile(null); setGlobalContext(''); setUploadedFiles([]);
+        setView('login');
+        setPanels({ plusMenu: false, settings: false, sidebar: false, accounts: false, notebooklm: false, search: false });
+      };
+
+      // SESSIONS
+      const createNewSession = async (uid) => {
+        const id = await db.sessions.add({ userId: String(uid || currentUser?.id || 'dev'), title: `محادثة ${new Date().toLocaleString('ar-EG')}`, timestamp: Date.now() });
+        setCurrentSessionId(id); setMessages([]);
+        const list = await db.sessions.where({ userId: String(uid || currentUser?.id || 'dev') }).reverse().sortBy('timestamp');
+        setSessions(list);
+        setPanels(p => ({ ...p, sidebar: false }));
+      };
+
+      const deleteSession = async (sid) => {
+        await db.messages.where({ sessionId: sid }).delete();
+        await db.sessions.delete(sid);
+        const list = await db.sessions.where({ userId: String(currentUser?.id || 'dev') }).reverse().sortBy('timestamp');
+        setSessions(list);
+        if (currentSessionId === sid) {
+          if (list.length > 0) setCurrentSessionId(list[0].id);
+          else await createNewSession(currentUser?.id || 'dev');
+        }
+      };
+
+      // ─── FILE HANDLING ───
+      const processFile = async (file) => {
+        const uid = String(currentUser?.id || 'dev');
+        let content = null;
+        let base64 = null;
+        let fileType = 'unknown';
+
+        if (isImage(file)) {
+          fileType = 'image';
+          base64 = await fileToBase64(file);
+        } else if (isAudio(file)) {
+          fileType = 'audio';
+          base64 = await fileToBase64(file);
+          const key = GROQ_KEYS[Math.floor(Math.random() * GROQ_KEYS.length)];
+          const transcription = await callGroqWhisper(file, key);
+          if (transcription) content = `[تفريغ صوتي]\n${transcription}`;
+        } else if (isVideo(file)) {
+          fileType = 'video';
+          base64 = await fileToBase64(file);
+          content = `[ملف فيديو: ${file.name}] — تم الرفع بنجاح. يمكنك السؤال عن محتواه أو سياقه.`;
+        } else if (isPDF(file)) {
+          fileType = 'pdf';
+          content = await parsePDF(file);
+        } else if (isDOCX(file)) {
+          fileType = 'docx';
+          content = await parseDOCX(file);
+        } else if (isText(file)) {
+          fileType = 'text';
+          content = await fileToText(file);
+        } else {
+          fileType = 'binary';
+          content = `[ملف: ${file.name}] — نوع الملف: ${file.type || 'غير معروف'}. الحجم: ${(file.size/1024).toFixed(1)} KB.`;
+        }
+
+        const record = { userId: uid, sessionId: currentSessionId, name: file.name, fileType, content, base64, timestamp: Date.now() };
+        await db.files.add(record);
+        await loadGlobalContext(uid);
+        return { ...record, file };
+      };
+
+      const handleFileChange = async (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        e.target.value = '';
+        setPanels(p => ({ ...p, plusMenu: false }));
+        setIsTyping(true);
+        try {
+          const processed = await processFile(f);
+          setPendingFile(processed);
+        } catch(err) {
+          alert(`خطأ في قراءة الملف: ${err.message}`);
+        }
+        setIsTyping(false);
+      };
+
+      const deleteFile = async (id) => {
+        await db.files.delete(id);
+        await loadGlobalContext(currentUser?.id || 'dev');
+      };
+
+      // ─── SEND ───
+      const handleSend = async () => {
+        if (!input.trim() && !pendingFile) return;
+        if (isTyping) return;
+
+        let userText = input.trim();
+        let imageBase64 = null;
+
+        if (pendingFile) {
+          const { name, fileType, content, base64 } = pendingFile;
+          if (fileType === 'image') {
+            imageBase64 = base64;
+            userText = userText || `حلّل هذه الصورة طبياً`;
+          } else if (fileType === 'audio') {
+            userText = userText ? `[صوت: ${name}] ${userText}` : `تفريغ صوتي من: ${name}\n${content}`;
+          } else if (fileType === 'video') {
+            userText = userText ? `[فيديو: ${name}] ${userText}` : `تحليل فيديو: ${name}`;
+          } else {
+            userText = userText ? `[${name}] ${userText}` : `حلّل هذا الملف: ${name}`;
+          }
+        }
+
+        const userMsg = { sessionId: currentSessionId, role: 'user', text: userText, timestamp: Date.now(), mediaType: pendingFile?.fileType || null };
+        const userMsgId = await db.messages.add(userMsg);
+        userMsg.id = userMsgId;
+
+        const hadFile = pendingFile;
+        setMessages(p => [...p, userMsg]);
+        setInput('');
+        setPendingFile(null);
+        setIsTyping(true);
+
+        let aiText = '';
+        let usedModel = null;
+
+        if (imageBase64 && hadFile?.fileType === 'image') {
+          const visionResult = await callGroqVision(imageBase64, userText, GROQ_KEYS[0]);
+          if (visionResult) { aiText = visionResult; usedModel = VISION_MODEL; }
+        }
+
+        if (!aiText) {
+          const fileCtx = hadFile?.content ? { name: hadFile.name, content: hadFile.content } : null;
+          const result = await callGroqText([...messages, userMsg], globalContext, fileCtx);
+          aiText = result.text;
+          usedModel = result.model;
+        }
+
+        if (usedModel) setActiveModel(usedModel);
+        const aiMsg = { sessionId: currentSessionId, role: 'ai', text: aiText, timestamp: Date.now() };
+        const aiId = await db.messages.add(aiMsg);
+        aiMsg.id = aiId;
+        setMessages(p => [...p, aiMsg]);
+        setIsTyping(false);
+
+        if (ttsEnabled && selectedVoiceName) {
+          speakText(aiText, selectedVoiceName, voiceRate, voicePitch);
+        }
+      };
+
+      // ─── VOICE INPUT ───
+      const startVoiceRecording = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+          mediaRecorderRef.current = mr;
+          audioChunksRef.current = [];
+          mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+          mr.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const key = GROQ_KEYS[Math.floor(Math.random() * GROQ_KEYS.length)];
+            const transcript = await callGroqWhisper(blob, key);
+            if (transcript) { setInput(transcript); }
+            setVoiceMode(false);
+          };
+          mr.start();
+          setIsRecording(true);
+          setVoiceMode(true);
+          setPanels(p => ({ ...p, plusMenu: false }));
+        } catch(err) {
+          const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SR) { alert("المتصفح لا يدعم التعرف على الصوت"); return; }
+          if (recognitionRef.current) recognitionRef.current.stop();
+          const rec = new SR();
+          recognitionRef.current = rec;
+          rec.lang = 'ar-SA'; rec.continuous = false; rec.interimResults = false;
+          rec.onresult = e => { setInput(e.results[0][0].transcript); setVoiceMode(false); };
+          rec.onerror = () => setVoiceMode(false);
+          rec.onend = () => setVoiceMode(false);
+          rec.start();
+          setVoiceMode(true);
+          setPanels(p => ({ ...p, plusMenu: false }));
+        }
+      };
+
+      const stopVoiceRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+          mediaRecorderRef.current.stop();
+          setIsRecording(false);
+        } else {
+          if (recognitionRef.current) recognitionRef.current.stop();
+          setVoiceMode(false);
+        }
+      };
+
+      // ─── WEB SEARCH ───
+      const handleSearch = async () => {
+        if (!searchQuery.trim()) return;
+        setIsSearching(true);
+        setSearchResults([]);
+        const results = await searchWeb(searchQuery);
+        setSearchResults(results);
+        setIsSearching(false);
+        if (results.length > 0) {
+          const summary = results.slice(0, 3).map(r => `**${r.title}**\n${r.snippet}`).join('\n\n');
+          setInput(`ملخص بحث: "${searchQuery}"\n\n${summary}`);
+        }
+      };
+
+      // ─── NOTEBOOKLM FEATURES ───
+      const runNotebookLM = async (mode) => {
+        if (uploadedFiles.length === 0 && messages.length === 0) {
+          alert("يرجى رفع ملفات أو وجود محادثة أولاً"); return;
+        }
+        setIsNbProcessing(true);
+        setNbMode(mode);
+        setNbResult('');
+
+        const sourceContext = uploadedFiles.filter(f => f.content).map(f => f.content).join('\n\n').substring(0, 10000)
+          || messages.slice(-20).map(m => m.text).join('\n').substring(0, 6000);
+
+        const prompts = {
+          summary: `استناداً للمحتوى التالي فقط، قدّم ملخصاً طبياً شاملاً ومنظماً يشمل: النقاط الرئيسية، المفاهيم المحورية، والخلاصة العلمية.\n\n${sourceContext}`,
+          studyguide: `استناداً للمحتوى التالي، أنشئ دليل مراجعة طبي متكاملاً يشمل: الأهداف التعليمية، النقاط الجوهرية، الجداول المقارنة، الأمثلة السريرية.\n\n${sourceContext}`,
+          flashcards: `استناداً للمحتوى التالي، أنشئ 15 بطاقة تعليمية (Flashcard) بصيغة:\n**السؤال:** ...\n**الإجابة:** ...\n\n${sourceContext}`,
+          podcast: `استناداً للمحتوى التالي، أنشئ نصاً لحلقة بودكاست طبي تعليمي بأسلوب حوار بين مقدّمَين (أحمد ومريم) يناقشان المفاهيم الطبية بشكل ممتع وعلمي.\n\n${sourceContext}`,
+          mcq: `استناداً للمحتوى التالي، أنشئ 10 أسئلة اختيار متعدد (MCQ) طبية مع 4 خيارات لكل سؤال وأجوبة موضحة.\n\n${sourceContext}`,
+          mindmap: `استناداً للمحتوى التالي، أنشئ خريطة ذهنية نصية منظمة هرمياً باستخدام تنسيق Markdown للمفاهيم الطبية الرئيسية والفرعية.\n\n${sourceContext}`
+        };
+
+        const result = await callGroqText([{ role: 'user', text: prompts[mode] }], '', null);
+        setNbResult(result.text);
+        setIsNbProcessing(false);
+      };
+
+      // ─── DEV ───
+      const injectHTML = async () => {
+        if (!devInput.html.trim()) return;
+        await db.injected_html.add({ code: devInput.html, timestamp: Date.now() });
+        setDevInput(d => ({ ...d, html: '' }));
+        await loadInjectedHTML();
+        alert("تم حفظ الوحدة البرمجية في IndexedDB.");
+      };
+
+      const deleteModule = async (id) => { await db.injected_html.delete(id); await loadInjectedHTML(); };
+
+      const togglePanel = (name) => setPanels(p => ({ ...p, [name]: !p[name] }));
+
+      // ═══════════════════════════════════════
+      // LOGIN VIEW
+      // ═══════════════════════════════════════
+      if (view === 'login') return (
+        <div className="h-screen flex flex-col justify-center items-center bg-slate-950 p-6 text-white">
+          <div className="mb-10 text-center animate-slide-up">
+            <div className="w-28 h-28 bg-blue-600 rounded-3xl mx-auto flex items-center justify-center shadow-[0_0_60px_rgba(37,99,235,0.6)] mb-6">
+              <svg width="52" height="52" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+                <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+              </svg>
+            </div>
+            <h1 className="text-4xl font-black italic tracking-tight">BRAIN MAP OS</h1>
+            <p className="text-blue-400 font-bold tracking-widest uppercase text-xs mt-2">Sovereign Medical Engine V14</p>
+          </div>
+          <div className="w-full max-w-sm">
+            <button onClick={() => togglePanel('accounts')} className="w-full p-5 bg-white text-black font-black rounded-2xl shadow-xl flex justify-between items-center active:scale-95 transition-transform">
+              <span>فتح مركز الحسابات</span>
+              <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            </button>
+          </div>
+
+          {panels.accounts && (
+            <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex justify-center items-center p-4">
+              <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 text-slate-900 animate-slide-up shadow-2xl max-h-[92vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-5 border-b pb-4">
+                  <h2 className="text-xl font-black">مركز الحسابات</h2>
+                  <button onClick={() => togglePanel('accounts')} className="p-2 bg-slate-100 rounded-full">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+                {accounts.length > 0 && (
+                  <div className="mb-5 space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">الحسابات المحفوظة</p>
+                    {accounts.map(acc => (
+                      <button key={acc.id} onClick={() => loginUser(acc)} className="w-full text-right p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between active:scale-95 transition-transform">
+                        <div><p className="font-black text-blue-900">{acc.name}</p><p className="text-[10px] text-blue-500 font-mono">{acc.email}</p></div>
+                        <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-lg">{acc.name[0]}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">حساب جديد</p>
+                  <div><label className="text-xs font-bold text-slate-500 block mb-1">الاسم</label><input type="text" value={regForm.name} onChange={e => setRegForm({ ...regForm, name: e.target.value })} className="w-full p-4 bg-slate-100 rounded-xl outline-none font-bold" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 block mb-1">البريد (ينتهي بـ .m-mail.edu.eg)</label><input type="email" value={regForm.email} onChange={e => setRegForm({ ...regForm, email: e.target.value })} className="w-full p-4 bg-slate-100 rounded-xl outline-none font-bold text-left" dir="ltr" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 block mb-1">كلمة المرور (9 رموز)</label><input type="password" maxLength="9" value={regForm.password} onChange={e => setRegForm({ ...regForm, password: e.target.value })} className="w-full p-4 bg-slate-100 rounded-xl outline-none font-bold text-center tracking-widest" /></div>
+                  <button onClick={handleRegister} className="w-full py-4 bg-blue-600 text-white font-black rounded-xl shadow-lg active:scale-95">تسجيل وحفظ في IndexedDB</button>
+                  <button onClick={handleDevLogin} className="w-full py-4 bg-slate-900 text-white font-black rounded-xl shadow-lg active:scale-95">دخول المطور (رمز خاص)</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+
+      // ═══════════════════════════════════════
+      // MAIN APP VIEW
+      // ═══════════════════════════════════════
+      return (
+        <div className="h-screen flex flex-col transition-colors duration-500 overflow-hidden" style={{ background: T.bg, color: T.text }}>
+
+          {/* ── HEADER ── */}
+          <header className="h-14 flex items-center justify-between px-3 border-b z-30 shrink-0" style={{ background: T.card, borderColor: `${T.text}18` }}>
+            <button onClick={() => togglePanel('sidebar')} className="p-2 rounded-xl active:scale-90 transition-transform">
+              <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+            </button>
+            <div className="flex flex-col items-center">
+              <h1 className="font-black text-sm italic" style={{ color: T.primary }}>BRAIN MAP OS</h1>
+              <span className="text-[8px] font-bold opacity-40 max-w-[140px] truncate">{activeModel}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => togglePanel('search')} className="p-2 rounded-xl active:scale-90 transition-transform" style={{ color: T.primary }}>
+                <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </button>
+              <button onClick={() => togglePanel('notebooklm')} className="p-2 rounded-xl active:scale-90 transition-transform" style={{ color: T.primary }}>
+                <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              </button>
+              <button onClick={() => togglePanel('settings')} className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg active:scale-90 transition-transform" style={{ background: T.primary }}>
+                {currentUser?.name?.[0] || '?'}
+              </button>
+            </div>
+          </header>
+
+          {/* ── CHAT AREA ── */}
+          <main className="flex-1 overflow-y-auto p-3 pb-32 space-y-3">
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full opacity-20 text-center pt-16">
+                <svg width="64" height="64" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+                  <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+                </svg>
+                <h2 className="text-xl font-black mt-4">المحرك الطبي الموحد</h2>
+                <p className="text-xs font-bold mt-2 max-w-[240px] leading-relaxed">
+                  Llama 3.3 70B · Vision AI · Whisper STT<br/>
+                  RAG حقيقي · قراءة أي ملف · بحث ويب<br/>
+                  NotebookLM · TTS بأصوات حقيقية
+                </p>
+              </div>
+            )}
+
+            {messages.map((msg, idx) => (
+              <div key={msg.id || idx} className={`flex w-full animate-slide-up ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                <div className={`max-w-[94%] p-3 rounded-2xl shadow text-sm leading-relaxed ${msg.role === 'user' ? 'rounded-tr-sm text-white' : 'rounded-tl-sm border'}`}
+                  style={msg.role === 'user' ? { background: T.primary } : { background: T.card, borderColor: `${T.text}18` }}>
+                  {msg.mediaType === 'image' && msg.role === 'user' && (
+                    <div className="mb-2 text-xs font-bold opacity-70 flex items-center gap-1">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      صورة مرفوعة
+                    </div>
+                  )}
+                  <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) }} />
+                  {msg.role === 'ai' && (
+                    <button onClick={() => speakText(msg.text, selectedVoiceName, voiceRate, voicePitch)} className="mt-2 text-[10px] font-bold opacity-50 hover:opacity-100 flex items-center gap-1 transition-opacity" style={{ color: T.primary }}>
+                      <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                      استمع
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {isTyping && (
+              <div className="flex justify-end">
+                <div className="p-3 rounded-2xl rounded-tl-sm border flex items-center gap-2" style={{ background: T.card, borderColor: `${T.text}15` }}>
+                  {[0,1,2].map(i => <div key={i} className="w-2 h-2 rounded-full typing-dot" style={{ background: T.primary, animationDelay: `${i*0.2}s` }} />)}
+                  <span className="text-[10px] font-bold" style={{ color: T.primary }}>يستنبط...</span>
+                </div>
+              </div>
+            )}
+            <div ref={scrollRef} />
+          </main>
+
+          {/* ── INPUT BAR ── */}
+          <div className="fixed bottom-0 inset-x-0 p-2 z-40" style={{ background: `${T.bg}EE`, backdropFilter: 'blur(20px)' }}>
+            {pendingFile && (
+              <div className="max-w-xl mx-auto mb-2 p-2.5 rounded-xl border flex items-center justify-between text-xs font-bold animate-slide-up" style={{ background: `${T.primary}18`, borderColor: T.primary }}>
+                <div className="flex items-center gap-2 truncate flex-1">
+                  {pendingFile.fileType === 'image' && <svg width="14" height="14" fill="none" stroke={T.primary} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>}
+                  {pendingFile.fileType === 'pdf' && <svg width="14" height="14" fill="none" stroke={T.primary} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
+                  {pendingFile.fileType === 'audio' && <svg width="14" height="14" fill="none" stroke={T.primary} strokeWidth="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/></svg>}
+                  {!['image','pdf','audio'].includes(pendingFile.fileType) && <svg width="14" height="14" fill="none" stroke={T.primary} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>}
+                  <span className="truncate" style={{ color: T.primary }}>{pendingFile.name}</span>
+                  <span className="shrink-0 opacity-60 capitalize">{pendingFile.fileType}</span>
+                </div>
+                <button onClick={() => setPendingFile(null)} className="shrink-0 ml-1 text-red-400">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+            )}
+
+            <div className="max-w-xl mx-auto flex items-center gap-1.5 p-1 rounded-[2rem] border shadow-2xl relative" style={{ background: T.card, borderColor: `${T.text}20` }}>
+
+              {/* PLUS MENU */}
+              {panels.plusMenu && (
+                <div className="absolute bottom-[110%] right-0 w-[260px] p-3 rounded-2xl grid grid-cols-2 gap-2 shadow-[0_12px_40px_rgba(0,0,0,0.5)] animate-fade-in border z-50" style={{ background: T.card, borderColor: `${T.text}18` }}>
+                  <label className="flex flex-col items-center justify-center p-3 rounded-xl gap-1.5 cursor-pointer active:scale-95 transition-transform" style={{ background: '#3b82f618' }}>
+                    <input ref={fileInputRef} type="file" accept="*/*" onChange={handleFileChange} />
+                    <svg width="22" height="22" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span className="text-[10px] font-black text-center" style={{ color: T.text }}>رفع أي ملف</span>
+                    <span className="text-[8px] opacity-50" style={{ color: T.text }}>PDF·Word·صورة·صوت·فيديو</span>
+                  </label>
+                  <button onClick={startVoiceRecording} className="flex flex-col items-center justify-center p-3 rounded-xl gap-1.5 active:scale-95 transition-transform" style={{ background: '#ef444418' }}>
+                    <svg width="22" height="22" fill="none" stroke="#ef4444" strokeWidth="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                    <span className="text-[10px] font-black" style={{ color: T.text }}>إدخال صوتي</span>
+                    <span className="text-[8px] opacity-50" style={{ color: T.text }}>Whisper + Web Speech</span>
+                  </button>
+                  <button onClick={() => { togglePanel('search'); togglePanel('plusMenu'); }} className="flex flex-col items-center justify-center p-3 rounded-xl gap-1.5 active:scale-95 transition-transform" style={{ background: '#10b98118' }}>
+                    <svg width="22" height="22" fill="none" stroke="#10b981" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span className="text-[10px] font-black" style={{ color: T.text }}>بحث الويب</span>
+                    <span className="text-[8px] opacity-50" style={{ color: T.text }}>DuckDuckGo</span>
+                  </button>
+                  <button onClick={() => { togglePanel('notebooklm'); togglePanel('plusMenu'); }} className="flex flex-col items-center justify-center p-3 rounded-xl gap-1.5 active:scale-95 transition-transform" style={{ background: '#a855f718' }}>
+                    <svg width="22" height="22" fill="none" stroke="#a855f7" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <span className="text-[10px] font-black" style={{ color: T.text }}>NotebookLM</span>
+                    <span className="text-[8px] opacity-50" style={{ color: T.text }}>ملخص·بطاقات·MCQ</span>
+                  </button>
+                </div>
+              )}
+
+              <button onClick={() => togglePanel('plusMenu')} className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all" style={panels.plusMenu ? { background: T.primary, color: 'white', transform: 'rotate(45deg)' } : { background: `${T.primary}18`, color: T.primary }}>
+                <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+
+              <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()} placeholder="اكتب استفسارك الطبي..." className="flex-1 h-10 bg-transparent border-none outline-none px-2 text-sm font-bold placeholder:opacity-40" style={{ color: T.text }} />
+
+              <button onClick={() => { window.speechSynthesis?.cancel(); }} className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center active:scale-90 transition-transform opacity-50 hover:opacity-100" style={{ color: T.text }}>
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+              </button>
+
+              <button onClick={handleSend} disabled={isTyping} className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform disabled:opacity-40" style={{ background: T.primary }}>
+                {isTyping ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full spin" /> : <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
+              </button>
+            </div>
+          </div>
+
+          {/* ── VOICE OVERLAY ── */}
+          {voiceMode && (
+            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center animate-fade-in" style={{ background: `${T.primary}F5`, backdropFilter: 'blur(30px)', color: 'white' }}>
+              <button onClick={stopVoiceRecording} className="absolute top-8 right-8 p-4 bg-white/20 rounded-full active:scale-90">
+                <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+              <div className="w-36 h-36 bg-white/10 border border-white/30 rounded-full flex items-center justify-center voice-pulse mb-8 shadow-2xl">
+                <svg width="52" height="52" fill="none" stroke="white" strokeWidth="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              </div>
+              <h2 className="text-2xl font-black mb-1">{isRecording ? "يُسجّل الآن..." : "جاري الاستماع..."}</h2>
+              <p className="text-xs font-bold opacity-70 mb-8 uppercase tracking-widest">{isRecording ? "Groq Whisper" : "Web Speech API"}</p>
+              <div className="flex gap-2 h-10 items-center">
+                {[...Array(12)].map((_, i) => <div key={i} className="w-1 bg-white rounded-full wave-bar" style={{ animationDelay: `${i * 0.08}s` }} />)}
+              </div>
+              <button onClick={stopVoiceRecording} className="mt-10 px-8 py-3 bg-white/20 rounded-full font-black text-sm active:scale-95">
+                {isRecording ? "إيقاف التسجيل" : "إلغاء"}
+              </button>
+            </div>
+          )}
+
+          {/* ── SEARCH PANEL ── */}
+          {panels.search && (
+            <div className="fixed inset-0 z-[65] bg-black/60 backdrop-blur-sm flex justify-center items-start pt-4 px-3" onClick={e => e.target === e.currentTarget && togglePanel('search')}>
+              <div className="w-full max-w-lg rounded-2xl shadow-2xl animate-slide-up overflow-hidden" style={{ background: T.card, borderColor: `${T.text}20`, border: '1px solid' }}>
+                <div className="p-4 border-b flex items-center gap-3" style={{ borderColor: `${T.text}15` }}>
+                  <svg width="20" height="20" fill="none" stroke={T.primary} strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input autoFocus type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} placeholder="ابحث طبياً على الويب..." className="flex-1 bg-transparent outline-none font-bold text-sm" style={{ color: T.text }} />
+                  <button onClick={handleSearch} disabled={isSearching} className="px-4 py-2 rounded-xl font-black text-white text-xs active:scale-95" style={{ background: T.primary }}>
+                    {isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full spin" /> : "بحث"}
+                  </button>
+                  <button onClick={() => togglePanel('search')}><svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                </div>
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {isSearching && <div className="p-8 text-center opacity-50 text-sm font-bold">جاري البحث...</div>}
+                  {searchResults.length === 0 && !isSearching && <div className="p-8 text-center opacity-30 text-sm font-bold">أدخل استعلامك ثم اضغط بحث</div>}
+                  {searchResults.map((r, i) => (
+                    <div key={i} className="p-4 search-result" style={{ borderColor: `${T.text}10` }}>
+                      <a href={r.url} target="_blank" rel="noreferrer" className="font-black text-sm hover:underline" style={{ color: T.primary }}>{r.title}</a>
+                      <p className="text-xs opacity-60 mt-1 leading-relaxed">{r.snippet}</p>
+                      <button onClick={() => { setInput(`استناداً لنتيجة بحث:\n${r.title}\n${r.snippet}`); togglePanel('search'); }} className="mt-2 text-[10px] font-black px-3 py-1 rounded-full active:scale-95" style={{ background: `${T.primary}20`, color: T.primary }}>
+                        أضف للدردشة
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── NOTEBOOKLM PANEL ── */}
+          {panels.notebooklm && (
+            <div className="fixed inset-0 z-[65] bg-black/60 backdrop-blur-sm flex justify-center items-start pt-4 px-3 overflow-y-auto" onClick={e => e.target === e.currentTarget && togglePanel('notebooklm')}>
+              <div className="w-full max-w-lg rounded-2xl shadow-2xl animate-slide-up overflow-hidden mb-4" style={{ background: T.card, border: `1px solid ${T.text}20` }}>
+                <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: `${T.text}15` }}>
+                  <div className="flex items-center gap-2">
+                    <svg width="20" height="20" fill="none" stroke={T.primary} strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <h2 className="font-black text-base">NotebookLM الطبي</h2>
+                  </div>
+                  <button onClick={() => togglePanel('notebooklm')}><svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                </div>
+
+                <div className="p-4 grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'summary', label: 'ملخص شامل', icon: '📋', desc: 'تلخيص الملفات' },
+                    { id: 'studyguide', label: 'دليل المراجعة', icon: '📚', desc: 'خطة منظمة' },
+                    { id: 'flashcards', label: 'بطاقات تعليمية', icon: '🃏', desc: '15 بطاقة' },
+                    { id: 'podcast', label: 'بودكاست', icon: '🎙️', desc: 'حوار تعليمي' },
+                    { id: 'mcq', label: 'أسئلة MCQ', icon: '✅', desc: '10 أسئلة' },
+                    { id: 'mindmap', label: 'خريطة ذهنية', icon: '🗺️', desc: 'هيكل هرمي' }
+                  ].map(btn => (
+                    <button key={btn.id} onClick={() => runNotebookLM(btn.id)} disabled={isNbProcessing} className="nb-card flex flex-col items-center justify-center p-3 rounded-xl gap-1 active:scale-95 transition-transform disabled:opacity-40" style={{ background: `${T.primary}15`, border: `1px solid ${T.primary}30` }}>
+                      <span className="text-xl">{btn.icon}</span>
+                      <span className="text-[10px] font-black text-center" style={{ color: T.text }}>{btn.label}</span>
+                      <span className="text-[8px] opacity-50" style={{ color: T.text }}>{btn.desc}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {isNbProcessing && (
+                  <div className="p-6 flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full spin" style={{ borderColor: `${T.primary}40`, borderTopColor: T.primary }} />
+                    <p className="text-xs font-bold opacity-60">يُعالج المحتوى...</p>
+                  </div>
+                )}
+
+                {nbResult && !isNbProcessing && (
+                  <div className="p-4 border-t" style={{ borderColor: `${T.text}12` }}>
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-xs font-black uppercase opacity-50">النتيجة</span>
+                      <div className="flex gap-2">
+                        <button onClick={() => speakText(nbResult, selectedVoiceName, voiceRate, voicePitch)} className="text-[10px] font-black px-3 py-1 rounded-full" style={{ background: `${T.primary}20`, color: T.primary }}>
+                          🔊 استمع
+                        </button>
+                        <button onClick={() => { setInput(`\n\n${nbResult}`); togglePanel('notebooklm'); }} className="text-[10px] font-black px-3 py-1 rounded-full" style={{ background: `${T.primary}20`, color: T.primary }}>
+                          أضف للدردشة
+                        </button>
+                      </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto rounded-xl p-3 text-xs leading-relaxed prose prose-sm max-w-none" style={{ background: `${T.text}08` }} dangerouslySetInnerHTML={{ __html: marked.parse(nbResult) }} />
+                  </div>
+                )}
+
+                {uploadedFiles.length > 0 && (
+                  <div className="p-3 border-t text-[10px] font-bold opacity-50 flex items-center gap-2" style={{ borderColor: `${T.text}12` }}>
+                    <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                    {uploadedFiles.length} ملف مرفوع كمصادر للتحليل
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── SIDEBAR ── */}
+          {panels.sidebar && (
+            <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && togglePanel('sidebar')}>
+              <div className="w-[78%] max-w-xs h-full flex flex-col shadow-2xl border-r" style={{ background: T.card, borderColor: `${T.text}18` }}>
+                <div className="p-4 border-b shrink-0" style={{ borderColor: `${T.text}10` }}>
+                  <button onClick={() => createNewSession(currentUser?.id || 'dev')} className="w-full py-3 rounded-xl font-black text-white flex justify-center items-center gap-2 active:scale-95 shadow-lg text-sm" style={{ background: T.primary }}>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    محادثة جديدة
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-3">المحادثات</p>
+                  {sessions.map(s => (
+                    <div key={s.id} className={`flex items-center gap-1 mb-1.5 rounded-xl transition-all ${currentSessionId === s.id ? 'border' : ''}`} style={currentSessionId === s.id ? { background: `${T.primary}18`, borderColor: T.primary } : {}}>
+                      <button onClick={() => { setCurrentSessionId(s.id); togglePanel('sidebar'); }} className="flex-1 text-right p-3 font-bold text-xs truncate">
+                        {s.title}
+                      </button>
+                      <button onClick={() => deleteSession(s.id)} className="shrink-0 p-2 text-red-400 opacity-60 hover:opacity-100">
+                        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      </button>
+                    </div>
+                  ))}
+
+                  {uploadedFiles.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-2">ملفات RAG ({uploadedFiles.length})</p>
+                      {uploadedFiles.map(f => (
+                        <div key={f.id} className="flex items-center gap-2 p-2 rounded-lg mb-1 text-[10px] font-bold border" style={{ borderColor: `${T.text}12` }}>
+                          <span className="opacity-60">{f.fileType === 'image' ? '🖼️' : f.fileType === 'pdf' ? '📄' : f.fileType === 'audio' ? '🎵' : f.fileType === 'video' ? '🎬' : '📁'}</span>
+                          <span className="flex-1 truncate">{f.name}</span>
+                          <button onClick={() => deleteFile(f.id)} className="text-red-400 shrink-0">×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── SETTINGS ── */}
+          {panels.settings && (
+            <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-md flex justify-end" onClick={e => e.target === e.currentTarget && togglePanel('settings')}>
+              <div className="w-[88%] max-w-sm h-full flex flex-col shadow-2xl border-l" style={{ background: T.card, borderColor: `${T.text}18` }}>
+                <div className="p-5 border-b flex justify-between items-center shrink-0" style={{ borderColor: `${T.text}10` }}>
+                  <h2 className="text-lg font-black">الإعدادات</h2>
+                  <button onClick={() => togglePanel('settings')}><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                  {/* User */}
+                  <div className="p-3 rounded-xl border flex items-center gap-3" style={{ borderColor: `${T.text}12`, background: `${T.primary}10` }}>
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-black shrink-0" style={{ background: T.primary }}>{currentUser?.name?.[0]}</div>
+                    <div>
+                      <p className="font-black text-sm">{currentUser?.name}</p>
+                      <p className="text-[9px] opacity-50 font-mono">{currentUser?.email}</p>
+                      <p className="text-[8px] font-black mt-0.5 uppercase" style={{ color: T.primary }}>{currentUser?.type === 'dev' ? '⚙️ Developer Root' : '🩺 Medical User'}</p>
+                    </div>
+                  </div>
+
+                  {/* Themes */}
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-2">المظهر — 15 ثيم طبي</p>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {THEMES.map(t => (
+                        <button key={t.id} onClick={() => setTheme(t)} title={t.name} className="aspect-square rounded-lg border-2 transition-all" style={{ background: t.bg, borderColor: T.id === t.id ? T.primary : t.border, transform: T.id === t.id ? 'scale(1.1)' : 'scale(1)', boxShadow: T.id === t.id ? `0 0 10px ${T.primary}80` : 'none' }} />
+                      ))}
+                    </div>
+                    <p className="text-[9px] font-bold opacity-40 text-center mt-1">{T.name}</p>
+                  </div>
+
+                  {/* TTS Voice */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest opacity-40">الصوت ({systemVoices.length} صوت متاح)</p>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-[9px] font-bold opacity-60">TTS</span>
+                        <div onClick={() => setTtsEnabled(v => !v)} className="w-10 h-5 rounded-full relative cursor-pointer transition-colors" style={{ background: ttsEnabled ? T.primary : `${T.text}30` }}>
+                          <div className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" style={{ right: ttsEnabled ? '2px' : '22px' }} />
+                        </div>
+                      </label>
+                    </div>
+                    <select value={selectedVoiceName} onChange={e => { setSelectedVoiceName(e.target.value); if (ttsEnabled) speakText("هذا الصوت المختار", e.target.value, voiceRate, voicePitch); }} className="voice-selector w-full p-3 rounded-xl border outline-none font-bold text-xs mb-2" style={{ borderColor: `${T.text}18`, color: T.text, background: T.bg }}>
+                      {systemVoices.length === 0 && <option>جاري تحميل الأصوات...</option>}
+                      {systemVoices.map(v => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
+                    </select>
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div>
+                        <p className="font-bold opacity-50 mb-1">السرعة: {voiceRate.toFixed(1)}x</p>
+                        <input type="range" min="0.5" max="2" step="0.1" value={voiceRate} onChange={e => setVoiceRate(parseFloat(e.target.value))} className="w-full accent-blue-500" />
+                      </div>
+                      <div>
+                        <p className="font-bold opacity-50 mb-1">الحدة: {voicePitch.toFixed(1)}</p>
+                        <input type="range" min="0.5" max="2" step="0.1" value={voicePitch} onChange={e => setVoicePitch(parseFloat(e.target.value))} className="w-full accent-blue-500" />
+                      </div>
+                    </div>
+                    <button onClick={() => speakText("مرحباً، هذا اختبار الصوت المختار الآن.", selectedVoiceName, voiceRate, voicePitch)} className="mt-2 w-full py-2 rounded-xl font-black text-xs flex items-center justify-center gap-2 active:scale-95" style={{ background: `${T.primary}20`, color: T.primary }}>
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                      اختبر الصوت الآن
+                    </button>
+                  </div>
+
+                  {/* Models */}
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-2">نماذج الذكاء الاصطناعي</p>
+                    <div className="space-y-1.5">
+                      {GROQ_MODELS.map(m => (
+                        <div key={m} className="flex items-center justify-between p-2.5 rounded-lg border text-[10px] font-bold" style={{ borderColor: `${T.text}12`, background: activeModel === m ? `${T.primary}12` : 'transparent' }}>
+                          <span className="font-mono truncate flex-1" style={{ color: activeModel === m ? T.primary : T.text }}>{m}</span>
+                          {activeModel === m && <span className="shrink-0 text-[8px] font-black px-2 py-0.5 rounded-full ml-1" style={{ background: T.primary, color: 'white' }}>نشط</span>}
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border text-[10px] font-bold" style={{ borderColor: `${T.text}12`, background: activeModel === VISION_MODEL ? `${T.primary}12` : 'transparent' }}>
+                        <span className="font-mono truncate flex-1" style={{ color: activeModel === VISION_MODEL ? T.primary : T.text }}>🖼️ {VISION_MODEL}</span>
+                        {activeModel === VISION_MODEL && <span className="shrink-0 text-[8px] font-black px-2 py-0.5 rounded-full ml-1" style={{ background: T.primary, color: 'white' }}>نشط</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dev Console */}
+                  {currentUser?.type === 'dev' && (
+                    <div className="p-4 rounded-xl border bg-black text-emerald-400 font-mono border-emerald-900">
+                      <h3 className="font-bold mb-1 text-white text-sm">⚙️ DEVELOPER CONSOLE</h3>
+                      <p className="text-[9px] text-emerald-600 mb-3">Root Access — Dr: Ibrahim Taha</p>
+                      <div className="mb-3">
+                        <label className="text-[9px] uppercase font-bold text-emerald-500 mb-1 block">Inject HTML Module</label>
+                        <textarea value={devInput.html} onChange={e => setDevInput(d => ({ ...d, html: e.target.value }))} className="w-full h-20 p-2 bg-slate-950 border border-emerald-900 rounded-lg outline-none text-[10px] resize-none" placeholder="<!-- HTML / Script -->" />
+                        <button onClick={injectHTML} className="w-full py-2 bg-emerald-900 text-white font-bold rounded-lg mt-1.5 text-xs active:scale-95">حفظ في IndexedDB</button>
+                      </div>
+                      {devData.htmlModules.length > 0 && (
+                        <div className="mb-3">
+                          <label className="text-[9px] uppercase font-bold text-emerald-500 block mb-1">Modules ({devData.htmlModules.length})</label>
+                          {devData.htmlModules.map((m, i) => (
+                            <div key={m.id} className="flex justify-between items-center p-1.5 bg-slate-950 border border-emerald-900 rounded-lg text-[9px] mb-1">
+                              <span>Module_{i+1}_{m.id}</span>
+                              <button onClick={() => deleteModule(m.id)} className="text-red-500 font-bold">حذف</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div>
+                        <label className="text-[9px] uppercase font-bold text-emerald-500 mb-1 block">Training Links</label>
+                        <div className="flex gap-1.5">
+                          <input type="text" value={devInput.link} onChange={e => setDevInput(d => ({ ...d, link: e.target.value }))} className="flex-1 p-2 bg-slate-950 border border-emerald-900 rounded-lg outline-none text-[10px]" placeholder="https://..." />
+                          <button onClick={() => { if(devInput.link.trim()) { setDevData(d => ({...d, socialLinks:[...d.socialLinks,devInput.link]})); setDevInput(d=>({...d,link:''})); } }} className="px-3 bg-emerald-900 text-white font-bold rounded-lg text-xs">Add</button>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {devData.socialLinks.map((l,i) => <span key={i} className="text-[8px] bg-emerald-950 px-2 py-0.5 rounded text-emerald-300 border border-emerald-800">{l.substring(0,20)}</span>)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Privacy */}
+                  <div className="p-3 rounded-xl border text-xs font-bold leading-relaxed opacity-60" style={{ borderColor: `${T.text}12` }}>
+                    <p className="font-black mb-1" style={{ color: T.primary }}>🔐 الخصوصية</p>
+                    <p>البيانات محلية في IndexedDB. 1000 مجلد أرشيف. Groq API للذكاء الاصطناعي.</p>
+                  </div>
+
+                  <button onClick={handleLogout} className="w-full py-4 rounded-xl font-black border flex items-center justify-center gap-2 active:scale-95 text-sm" style={{ background: '#ef444412', color: '#ef4444', borderColor: '#ef444428' }}>
+                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    تسجيل الخروج
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
